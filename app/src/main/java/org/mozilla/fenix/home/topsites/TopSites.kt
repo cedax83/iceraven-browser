@@ -124,6 +124,7 @@ internal fun TopSites(
         },
         isExpandToggleEnabled = state.isExpandToggleEnabled,
         isExpanded = isExpanded,
+        onTopSiteMoved = interactor::onTopSiteMoved,
     )
 }
 
@@ -145,6 +146,7 @@ internal fun TopSites(
  * @param onExpandToggleClick Invoked when the user clicks on the expand/collapse control.
  * @param isExpandToggleEnabled Whether the control that expands and collapses the grid is enabled.
  * @param isExpanded Whether every top site is shown rather than only the first [TOP_SITES_COLLAPSED_ROWS] rows.
+ * @param onTopSiteMoved Invoked when the user drags a top site to a new index.
  */
 @Composable
 @Suppress("LongParameterList")
@@ -164,6 +166,7 @@ fun TopSites(
     onExpandToggleClick: () -> Unit = {},
     isExpandToggleEnabled: Boolean = false,
     isExpanded: Boolean = false,
+    onTopSiteMoved: (TopSite, Int) -> Unit = { _, _ -> },
 ) {
     BoxWithConstraints(
         modifier =
@@ -204,6 +207,7 @@ fun TopSites(
                 onTopSiteImpression = onTopSiteImpression,
                 onTopSitesItemBound = onTopSitesItemBound,
                 onAddShortcutClicked = onAddShortcutClicked,
+                onTopSiteMoved = onTopSiteMoved,
             )
 
             if (isExpandToggleEnabled && (hasHiddenShortcuts || hasHiddenAddShortcut)) {
@@ -314,6 +318,7 @@ data class TopSiteColors(
  * @param onTopSiteImpression Invoked when the user sees a provided top site.
  * @param onTopSitesItemBound Invoked during the composition of a top site item.
  * @param itemLayout The sizes to lay the top site out with, adapted to the available width.
+ * @param isDragged Whether the top site is being dragged, which closes its menu.
  */
 @Suppress(
     "LongMethod",
@@ -331,8 +336,15 @@ fun TopSiteItem(
     onTopSiteImpression: (TopSite.Provided, Int) -> Unit,
     onTopSitesItemBound: () -> Unit,
     itemLayout: TopSiteItemLayout = TopSiteItemLayout.sizes(),
+    isDragged: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+
+    // The long press that starts a drag opens the menu first.
+    LaunchedEffect(isDragged) {
+        if (isDragged) menuExpanded = false
+    }
+
     val onLongClick = {
         onTopSiteLongClick(topSite)
         menuExpanded = true

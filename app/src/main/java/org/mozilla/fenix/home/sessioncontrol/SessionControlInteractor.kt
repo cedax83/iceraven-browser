@@ -246,6 +246,10 @@ class SessionControlInteractor(
         topSiteController.handleExpandToggleClicked(isExpanded)
     }
 
+    override fun onTopSiteMoved(topSite: TopSite, toIndex: Int) {
+        topSiteController.handleTopSiteMoved(topSite, toIndex)
+    }
+
     override fun onShortcutsLibraryViewed() {
         topSiteController.handleShortcutsLibraryViewed()
     }

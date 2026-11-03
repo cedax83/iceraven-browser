@@ -106,6 +106,7 @@ class DefaultTopSiteControllerTest {
 
     @Before
     fun setup() = runTest {
+        every { settings.topSitesUserOrder } returns emptyList()
         store = BrowserStore(BrowserState(search = SearchState(regionSearchEngines = listOf(searchEngine))))
 
         every { navController.currentDestination } returns

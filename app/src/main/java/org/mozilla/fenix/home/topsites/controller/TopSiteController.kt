@@ -54,6 +54,10 @@ import org.mozilla.fenix.home.topsites.AddShortcutEntryPoint
 import org.mozilla.fenix.home.topsites.AddShortcutSource
 import org.mozilla.fenix.home.topsites.ShortcutsFragmentDirections
 import org.mozilla.fenix.home.topsites.interactor.TopSiteInteractor
+import org.mozilla.fenix.home.topsites.isPinnedShortcut
+import org.mozilla.fenix.home.topsites.movedTo
+import org.mozilla.fenix.home.topsites.userOrderAfterMoving
+import org.mozilla.fenix.home.topsites.withUrlChanged
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.utils.Settings
 
@@ -97,6 +101,9 @@ interface TopSiteController {
 
     /** @see [TopSiteInteractor.onExpandToggleClicked] */
     fun handleExpandToggleClicked(isExpanded: Boolean)
+
+    /** @see [TopSiteInteractor.onTopSiteMoved] */
+    fun handleTopSiteMoved(topSite: TopSite, toIndex: Int)
 
     /** @see [TopSiteInteractor.onShortcutsLibraryViewed] */
     fun handleShortcutsLibraryViewed()
@@ -225,6 +232,8 @@ class DefaultTopSiteController(
 
             appStore.dispatch(ShortcutAction.FrecencyTopSitePromoted)
         } else {
+            settings.topSitesUserOrder = settings.topSitesUserOrder.withUrlChanged(topSite.url, url)
+
             topSitesUseCases.updateTopSites(
                 topSite = topSite,
                 title = title,
@@ -406,6 +415,26 @@ class DefaultTopSiteController(
             TopSites.showMore.record(NoExtras())
         } else {
             TopSites.showLess.record(NoExtras())
+        }
+    }
+
+    override fun handleTopSiteMoved(topSite: TopSite, toIndex: Int) {
+        val topSites = appStore.state.topSites
+        val fromIndex = topSites.indexOf(topSite)
+        if (fromIndex < 0 || toIndex !in topSites.indices) return
+
+        val reordered = topSites.movedTo(fromIndex, toIndex)
+        settings.topSitesUserOrder = reordered.userOrderAfterMoving(topSite)
+        appStore.dispatch(AppAction.TopSitesChange(reordered))
+
+        // Only a pinned shortcut keeps its position, so moving any other site pins it.
+        if (!topSite.isPinnedShortcut()) {
+            viewLifecycleScope.launch {
+                topSitesUseCases.addPinnedSites(
+                    title = topSite.title ?: topSite.url,
+                    url = topSite.url,
+                )
+            }
         }
     }
 

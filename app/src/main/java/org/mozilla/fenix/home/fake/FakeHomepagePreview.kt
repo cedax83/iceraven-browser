@@ -212,6 +212,10 @@ internal object FakeHomepagePreview {
                     /* no op */
                 }
 
+                override fun onTopSiteMoved(topSite: TopSite, toIndex: Int) {
+                    /* no op */
+                }
+
                 override fun onShortcutsLibraryViewed() {
                     /* no op */
                 }

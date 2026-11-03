@@ -89,6 +89,7 @@ import org.mozilla.fenix.home.middleware.HomeTelemetryMiddleware
 import org.mozilla.fenix.home.setup.store.DefaultSetupChecklistRepository
 import org.mozilla.fenix.home.setup.store.SetupChecklistPreferencesMiddleware
 import org.mozilla.fenix.home.setup.store.SetupChecklistTelemetryMiddleware
+import org.mozilla.fenix.home.topsites.applyUserOrder
 import org.mozilla.fenix.ipprotection.store.DefaultIPProtectionPromptRepository
 import org.mozilla.fenix.messaging.state.MessagingMiddleware
 import org.mozilla.fenix.nimbus.FxNimbus
@@ -312,7 +313,7 @@ class Components(
                     AppState(
                             collections = core.tabCollectionStorage.cachedTabCollections,
                             expandedCollections = emptySet(),
-                            topSites = core.topSitesStorage.cachedTopSites.sort(),
+                            topSites = core.topSitesStorage.cachedTopSites.sort().applyUserOrder(settings.topSitesUserOrder),
                             bookmarks = emptyList(),
                             // Provide an initial state for recent tabs to prevent re-rendering on the home screen.
                             //  This will otherwise cause a visual jump as the section gets rendered from no state

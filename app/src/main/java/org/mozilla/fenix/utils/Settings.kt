@@ -41,6 +41,8 @@ import mozilla.components.support.locale.LocaleManager
 import mozilla.components.support.utils.Browsers
 import mozilla.components.support.utils.ext.PackageManagerCompatHelper
 import mozilla.components.support.utils.ext.packageManagerCompatHelper
+import org.json.JSONArray
+import org.json.JSONException
 import org.mozilla.experiments.nimbus.NimbusEventStore
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.Config
@@ -2238,6 +2240,29 @@ class Settings(
             appContext.getPreferenceKey(R.string.pref_key_top_sites_max_limit),
             default = TOP_SITES_MAX_COUNT,
         )
+
+    private var topSitesUserOrderJson by
+        stringPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_top_sites_user_order),
+            default = "",
+        )
+
+    /** The URLs of the pinned shortcuts in the order the user arranged them, empty if they never did. */
+    var topSitesUserOrder: List<String>
+        get() {
+            val json = topSitesUserOrderJson
+            if (json.isEmpty()) return emptyList()
+
+            return try {
+                val urls = JSONArray(json)
+                List(urls.length()) { urls.getString(it) }
+            } catch (e: JSONException) {
+                emptyList()
+            }
+        }
+        set(value) {
+            topSitesUserOrderJson = JSONArray(value).toString()
+        }
 
     var openTabsCount by
         intPreference(

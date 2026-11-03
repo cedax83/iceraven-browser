@@ -161,6 +161,7 @@ private fun ShortcutsScreenContent(
             onTopSiteImpression = interactor::onTopSiteImpression,
             onTopSitesItemBound = {},
             onAddShortcutClicked = onAddShortcutClicked,
+            onTopSiteMoved = interactor::onTopSiteMoved,
             modifier = Modifier.fillMaxSize().padding(FirefoxTheme.layout.space.static200),
         )
     }

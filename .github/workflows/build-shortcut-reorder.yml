@@ -1,0 +1,134 @@
+# Builds a personal Iceraven APK from the shortcut-reorder branch of a fork.
+#
+# It installs next to the official app instead of replacing it, so nothing is lost while testing.
+#
+# Without any setup every build is signed with a new temporary key, which is fine for testing but means each new build
+# has to be uninstalled and installed again. To be able to update in place, add these repository secrets:
+# MY_SIGNING_KEY (keystore in base64), MY_KEY_ALIAS, MY_KEY_STORE_PASSWORD and MY_KEY_PASSWORD.
+name: Build shortcut reorder APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - shortcut-reorder
+
+permissions:
+  contents: write
+
+# In coda, mai in parallelo.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: 'true'
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Install Android SDK with pieces Gradle skips
+        run: ./automation/iceraven/install-sdk.sh
+
+      - name: Create version name
+        run: echo "VERSION_NAME=$(git describe --tags HEAD 2>/dev/null || echo "$(cat version.txt)-custom")" >> $GITHUB_ENV
+
+      - name: Patch on the fly
+        run: |
+          ./automation/iceraven/patch_android_components.sh
+          ./automation/iceraven/setup_venv.sh
+
+      - name: Install next to the official app
+        run: |
+          sed -i 's/applicationIdSuffix ".iceraven"$/applicationIdSuffix ".iceraven.custom"/' app/build.gradle
+          sed -i 's/io.github.forkmaintainers.iceraven.sharedID/io.github.forkmaintainers.iceraven.custom.sharedID/' app/build.gradle
+          grep -q 'applicationIdSuffix ".iceraven.custom"' app/build.gradle
+
+      - name: Replace strings
+        run: |
+          sed -i 's/Firefox/Iceraven/g' app/src/*/res/values*/*strings.xml
+          sed -i '/about_content/s/Mozilla/@forkmaintainers/' app/src/*/res/values*/*strings.xml
+          sed -i '/<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%s/%1$s/g; /<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%d/%2$d/g' app/src/*/res/values*/*strings.xml
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build forkRelease variant of app
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-XX:MaxMetaspaceSize=4g -Xms1g -Xmx7g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dev/stderr"
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew app:assembleForkRelease -PversionName=${{ env.VERSION_NAME }} --stacktrace --no-daemon 2>&1 | tee gradle.log || {
+            bash .github/report-gradle-failure.sh gradle.log
+            exit 1
+          }
+
+      - name: Pick the signing key
+        id: key
+        env:
+          MY_SIGNING_KEY: ${{ secrets.MY_SIGNING_KEY }}
+          MY_KEY_ALIAS: ${{ secrets.MY_KEY_ALIAS }}
+          MY_KEY_STORE_PASSWORD: ${{ secrets.MY_KEY_STORE_PASSWORD }}
+          MY_KEY_PASSWORD: ${{ secrets.MY_KEY_PASSWORD }}
+        run: |
+          if [ -n "$MY_SIGNING_KEY" ]; then
+            KEY="$MY_SIGNING_KEY"; ALIAS="$MY_KEY_ALIAS"; STORE_PASS="$MY_KEY_STORE_PASSWORD"; KEY_PASS="$MY_KEY_PASSWORD"
+          else
+            echo "::warning::No MY_SIGNING_KEY secret: signing with a temporary key."
+            ALIAS=temporary; STORE_PASS="$(openssl rand -hex 16)"; KEY_PASS="$STORE_PASS"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/temporary.jks" -storetype PKCS12 -alias "$ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 3650 -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
+              -dname "CN=Iceraven personal build"
+            KEY="$(base64 -w0 "$RUNNER_TEMP/temporary.jks")"
+          fi
+          for secret in "$STORE_PASS" "$KEY_PASS" "$KEY"; do echo "::add-mask::$secret"; done
+          {
+            echo "key=$KEY"
+            echo "alias=$ALIAS"
+            echo "store_pass=$STORE_PASS"
+            echo "key_pass=$KEY_PASS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create signed APKs
+        uses: akliuxingyuan/sign-android-release@v2.0.1
+        with:
+          releaseDir: gradle/build/app/outputs/apk/forkRelease/
+          signingKey: ${{ steps.key.outputs.key }}
+          keyAlias: ${{ steps.key.outputs.alias }}
+          keyStorePassword: ${{ steps.key.outputs.store_pass }}
+          keyPassword: ${{ steps.key.outputs.key_pass }}
+
+      - name: Upload arm64 apk
+        uses: actions/upload-artifact@v7
+        with:
+          path: gradle/build/app/outputs/apk/forkRelease/app-arm64-v8a-forkRelease.apk
+          name: ${{ env.VERSION_NAME }}-arm64-v8a.apk
+
+      # Una release rende l'APK scaricabile direttamente dal telefono, senza zip. Resta solo l'ultima.
+      - name: Publish the APK as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="custom-${GITHUB_RUN_NUMBER}"
+          apk="$RUNNER_TEMP/iceraven-custom-arm64-v8a.apk"
+          cp gradle/build/app/outputs/apk/forkRelease/app-arm64-v8a-forkRelease.apk "$apk"
+          gh release create "$tag" "$apk" --target "$GITHUB_SHA" --prerelease \
+            --title "Iceraven riordino scorciatoie (${GITHUB_RUN_NUMBER})" \
+            --notes "Build personale dal ramo shortcut-reorder, versione ${VERSION_NAME}. Si installa accanto a Iceraven ufficiale."
+          gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^custom-' | grep -vx "$tag" | while read -r old; do
+            gh release delete "$old" --yes --cleanup-tag
+          done
