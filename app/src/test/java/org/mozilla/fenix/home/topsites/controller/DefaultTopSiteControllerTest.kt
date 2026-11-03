@@ -47,6 +47,7 @@ import org.mozilla.fenix.components.Analytics
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppAction.ShortcutAction
+import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.usecases.FenixBrowserUseCases
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.helpers.FenixGleanTestRule
@@ -106,6 +107,7 @@ class DefaultTopSiteControllerTest {
 
     @Before
     fun setup() = runTest {
+        every { settings.topSitesUserOrder } returns emptyList()
         store = BrowserStore(BrowserState(search = SearchState(regionSearchEngines = listOf(searchEngine))))
 
         every { navController.currentDestination } returns
@@ -1178,6 +1180,56 @@ class DefaultTopSiteControllerTest {
         coVerify {
             topSitesUseCases.updateTopSites(topSite = topSite, title = title, url = url)
         }
+    }
+
+    @Test
+    fun `WHEN the URL of a pinned top site is updated THEN it keeps its place in the saved order`() = runTest {
+        val topSite = TopSite.Pinned(id = 1L, title = "Mozilla", url = "mozilla.org", createdAt = 0)
+        every { settings.topSitesUserOrder } returns listOf("first.org", "mozilla.org", "last.org")
+
+        createController(this).updateTopSite(topSite = topSite, title = "Firefox", url = "firefox.com")
+
+        verify { settings.topSitesUserOrder = listOf("first.org", "firefox.com", "last.org") }
+    }
+
+    @Test
+    fun `WHEN a pinned top site is moved THEN save the order and show it without pinning anything`() = runTest {
+        val first = TopSite.Pinned(id = 1L, title = "First", url = "first.org", createdAt = 0)
+        val second = TopSite.Pinned(id = 2L, title = "Second", url = "second.org", createdAt = 0)
+        val frecent = TopSite.Frecent(id = null, title = "Frecent", url = "frecent.org", createdAt = null)
+        every { appStore.state } returns AppState(topSites = listOf(first, second, frecent))
+
+        createController(this).handleTopSiteMoved(topSite = first, toIndex = 1)
+        testScheduler.advanceUntilIdle()
+
+        verify { settings.topSitesUserOrder = listOf("second.org", "first.org") }
+        verify { appStore.dispatch(AppAction.TopSitesChange(listOf(second, first, frecent))) }
+        coVerify(exactly = 0) { topSitesUseCases.addPinnedSites(any(), any()) }
+    }
+
+    @Test
+    fun `WHEN a frecent top site is moved THEN save the order and pin it`() = runTest {
+        val pinned = TopSite.Pinned(id = 1L, title = "Pinned", url = "pinned.org", createdAt = 0)
+        val frecent = TopSite.Frecent(id = null, title = "Frecent", url = "frecent.org", createdAt = null)
+        every { appStore.state } returns AppState(topSites = listOf(pinned, frecent))
+
+        createController(this).handleTopSiteMoved(topSite = frecent, toIndex = 0)
+        testScheduler.advanceUntilIdle()
+
+        verify { settings.topSitesUserOrder = listOf("frecent.org", "pinned.org") }
+        verify { appStore.dispatch(AppAction.TopSitesChange(listOf(frecent, pinned))) }
+        coVerify { topSitesUseCases.addPinnedSites(title = "Frecent", url = "frecent.org") }
+    }
+
+    @Test
+    fun `WHEN a top site that is no longer displayed is moved THEN nothing changes`() = runTest {
+        val gone = TopSite.Pinned(id = 1L, title = "Gone", url = "gone.org", createdAt = 0)
+        every { appStore.state } returns AppState(topSites = emptyList())
+
+        createController(this).handleTopSiteMoved(topSite = gone, toIndex = 0)
+
+        verify(exactly = 0) { settings.topSitesUserOrder = any() }
+        verify(exactly = 0) { appStore.dispatch(any()) }
     }
 
     @Test

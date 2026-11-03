@@ -79,6 +79,14 @@ interface TopSiteInteractor {
      */
     fun onExpandToggleClicked(isExpanded: Boolean)
 
+    /**
+     * Saves the new position of a top site. Called when the user drops a top site they dragged somewhere else.
+     *
+     * @param topSite The top site that was moved.
+     * @param toIndex The index the top site was dropped on.
+     */
+    fun onTopSiteMoved(topSite: TopSite, toIndex: Int)
+
     /** Sends telemetry related to the shortcuts library being viewed. */
     fun onShortcutsLibraryViewed()
 
@@ -144,6 +152,10 @@ class DefaultTopSiteInteractor(private val controller: TopSiteController) : TopS
 
     override fun onExpandToggleClicked(isExpanded: Boolean) {
         controller.handleExpandToggleClicked(isExpanded)
+    }
+
+    override fun onTopSiteMoved(topSite: TopSite, toIndex: Int) {
+        controller.handleTopSiteMoved(topSite, toIndex)
     }
 
     override fun onSaveShortcut(

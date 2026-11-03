@@ -17,14 +17,8 @@ class DefaultTopSitesView(
 ) : TopSitesView {
 
     override fun displayTopSites(topSites: List<TopSite>) {
-        appStore.dispatch(
-            AppAction.TopSitesChange(
-                if (!settings.showContileFeature) {
-                    topSites
-                } else {
-                    topSites.sort()
-                }
-            )
-        )
+        val sortedTopSites = if (settings.showContileFeature) topSites.sort() else topSites
+
+        appStore.dispatch(AppAction.TopSitesChange(sortedTopSites.applyUserOrder(settings.topSitesUserOrder)))
     }
 }

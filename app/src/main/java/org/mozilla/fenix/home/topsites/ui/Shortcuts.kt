@@ -5,6 +5,7 @@
 package org.mozilla.fenix.home.topsites.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,18 +13,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.zIndex
 import mozilla.components.compose.base.annotation.FlexibleWindowLightDarkPreview
 import mozilla.components.feature.top.sites.TopSite
 import org.mozilla.fenix.compose.MenuItem
@@ -37,6 +46,7 @@ import org.mozilla.fenix.home.topsites.TopSiteItemText
 import org.mozilla.fenix.home.topsites.TopSitesRowLayout
 import org.mozilla.fenix.home.topsites.calculateTopSitesRowLayout
 import org.mozilla.fenix.home.topsites.getMenuItems
+import org.mozilla.fenix.home.topsites.gridKeys
 import org.mozilla.fenix.theme.FirefoxTheme
 
 /**
@@ -59,6 +69,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
  * @param onTopSiteImpression Invoked when the user sees a provided top site.
  * @param onTopSitesItemBound Invoked during the composition of a top site item.
  * @param onAddShortcutClicked Invoked when the user clicks on the "Add shortcut" tile.
+ * @param onTopSiteMoved Invoked when the user drags a top site to a new index.
  * @param modifier The [Modifier] to be applied to the grid.
  */
 @Composable
@@ -74,6 +85,7 @@ internal fun Shortcuts(
     onTopSiteImpression: (TopSite.Provided, Int) -> Unit,
     onTopSitesItemBound: () -> Unit,
     onAddShortcutClicked: () -> Unit,
+    onTopSiteMoved: (TopSite, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val itemCount = topSites.size + if (showAddShortcut) 1 else 0
@@ -99,6 +111,7 @@ internal fun Shortcuts(
                 onTopSiteImpression = onTopSiteImpression,
                 onTopSitesItemBound = onTopSitesItemBound,
                 onAddShortcutClicked = onAddShortcutClicked,
+                onTopSiteMoved = onTopSiteMoved,
             )
         }
 
@@ -186,6 +199,11 @@ private const val TITLE_HEIGHT_PROBE = "Measuring a shortcut title that wraps"
 
 private const val MAX_TITLE_LINES = 2
 
+/** Grid key of the "Add shortcut" tile. Not a URL, so it can't clash with the key of a shortcut. */
+private const val ADD_SHORTCUT_KEY = "add_shortcut_tile"
+
+private const val DRAGGED_SHORTCUT_SCALE = 1.1f
+
 @Composable
 @Suppress("LongParameterList")
 private fun ShortcutsLazyGrid(
@@ -202,30 +220,68 @@ private fun ShortcutsLazyGrid(
     onTopSiteImpression: (TopSite.Provided, Int) -> Unit,
     onTopSitesItemBound: () -> Unit,
     onAddShortcutClicked: () -> Unit,
+    onTopSiteMoved: (TopSite, Int) -> Unit,
 ) {
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+
+    // The arrangement on screen, which is ahead of topSites while a shortcut is being dragged.
+    val displayedSites = remember(topSites) { mutableStateOf(topSites) }
+    val latestDisplayedSites by rememberUpdatedState(displayedSites)
+    val latestOnTopSiteMoved by rememberUpdatedState(onTopSiteMoved)
+
+    val reorderState =
+        remember(gridState, scrollable) {
+            ShortcutsReorderState(
+                gridState = gridState,
+                scope = scope,
+                canAutoScroll = scrollable,
+                sites = { latestDisplayedSites.value },
+                onSitesChange = { latestDisplayedSites.value = it },
+                onDrop = { topSite, toIndex -> latestOnTopSiteMoved(topSite, toIndex) },
+            )
+        }
+
+    val sites = displayedSites.value
+    val keys = remember(sites) { sites.gridKeys() }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(layout.columns),
-        modifier = modifier,
+        state = gridState,
+        modifier = modifier.shortcutsReorderGesture(reorderState),
         userScrollEnabled = scrollable,
         verticalArrangement = Arrangement.spacedBy(rowSpacing),
         horizontalArrangement = Arrangement.spacedBy(TOP_SITES_SPACING),
     ) {
-        itemsIndexed(topSites) { index, topSite ->
-            TopSiteItem(
-                topSite = topSite,
-                menuItems = menuItems(topSite),
-                position = index,
-                topSiteColors = topSiteColors,
-                onTopSiteClick = onTopSiteClick,
-                onTopSiteLongClick = onTopSiteLongClick,
-                onTopSiteImpression = onTopSiteImpression,
-                onTopSitesItemBound = onTopSitesItemBound,
-                itemLayout = layout.itemLayout,
-            )
+        itemsIndexed(items = sites, key = { index, _ -> keys[index] }) { index, topSite ->
+            val key = keys[index]
+
+            DraggableShortcut(key = key, reorderState = reorderState) { isDragged ->
+                TopSiteItem(
+                    topSite = topSite,
+                    menuItems = menuItems(topSite),
+                    position = index,
+                    topSiteColors = topSiteColors,
+                    onTopSiteClick = onTopSiteClick,
+                    onTopSiteLongClick = onTopSiteLongClick,
+                    onTopSiteImpression = onTopSiteImpression,
+                    onTopSitesItemBound = onTopSitesItemBound,
+                    itemLayout = layout.itemLayout,
+                    isDragged = isDragged,
+                    reorderActions =
+                        rememberShortcutReorderActions(
+                            topSite = topSite,
+                            sites = sites,
+                            index = index,
+                            columns = layout.columns,
+                            onTopSiteMoved = onTopSiteMoved,
+                        ),
+                )
+            }
         }
 
         if (showAddShortcut) {
-            item {
+            item(key = ADD_SHORTCUT_KEY) {
                 AddShortcutItem(
                     topSiteColors = topSiteColors,
                     onClick = onAddShortcutClicked,
@@ -233,6 +289,44 @@ private fun ShortcutsLazyGrid(
                 )
             }
         }
+    }
+}
+
+/** The cell of a shortcut, which follows the finger while the shortcut is dragged and animates when others move. */
+@Composable
+private fun LazyGridItemScope.DraggableShortcut(
+    key: String,
+    reorderState: ShortcutsReorderState,
+    content: @Composable (isDragged: Boolean) -> Unit,
+) {
+    val isDragged = key == reorderState.draggedKey
+    val isSettling = key == reorderState.settlingKey
+
+    Box(
+        modifier =
+            Modifier.zIndex(if (isDragged || isSettling) 1f else 0f)
+                .then(
+                    when {
+                        isDragged ->
+                            Modifier.graphicsLayer {
+                                val translation = reorderState.dragTranslation()
+                                translationX = translation.x
+                                translationY = translation.y
+                                scaleX = DRAGGED_SHORTCUT_SCALE
+                                scaleY = DRAGGED_SHORTCUT_SCALE
+                            }
+
+                        isSettling ->
+                            Modifier.graphicsLayer {
+                                translationX = reorderState.settleOffset.value.x
+                                translationY = reorderState.settleOffset.value.y
+                            }
+
+                        else -> Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                    }
+                )
+    ) {
+        content(isDragged)
     }
 }
 
