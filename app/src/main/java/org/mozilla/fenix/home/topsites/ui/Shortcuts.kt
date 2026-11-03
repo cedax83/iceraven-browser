@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -254,33 +255,8 @@ private fun ShortcutsLazyGrid(
     ) {
         itemsIndexed(items = sites, key = { index, _ -> keys[index] }) { index, topSite ->
             val key = keys[index]
-            val isDragged = key == reorderState.draggedKey
-            val isSettling = key == reorderState.settlingKey
 
-            Box(
-                modifier =
-                    Modifier.zIndex(if (isDragged || isSettling) 1f else 0f)
-                        .then(
-                            when {
-                                isDragged ->
-                                    Modifier.graphicsLayer {
-                                        val translation = reorderState.dragTranslation()
-                                        translationX = translation.x
-                                        translationY = translation.y
-                                        scaleX = DRAGGED_SHORTCUT_SCALE
-                                        scaleY = DRAGGED_SHORTCUT_SCALE
-                                    }
-
-                                isSettling ->
-                                    Modifier.graphicsLayer {
-                                        translationX = reorderState.settleOffset.value.x
-                                        translationY = reorderState.settleOffset.value.y
-                                    }
-
-                                else -> Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
-                            }
-                        )
-            ) {
+            DraggableShortcut(key = key, reorderState = reorderState) { isDragged ->
                 TopSiteItem(
                     topSite = topSite,
                     menuItems = menuItems(topSite),
@@ -313,6 +289,44 @@ private fun ShortcutsLazyGrid(
                 )
             }
         }
+    }
+}
+
+/** The cell of a shortcut, which follows the finger while the shortcut is dragged and animates when others move. */
+@Composable
+private fun LazyGridItemScope.DraggableShortcut(
+    key: String,
+    reorderState: ShortcutsReorderState,
+    content: @Composable (isDragged: Boolean) -> Unit,
+) {
+    val isDragged = key == reorderState.draggedKey
+    val isSettling = key == reorderState.settlingKey
+
+    Box(
+        modifier =
+            Modifier.zIndex(if (isDragged || isSettling) 1f else 0f)
+                .then(
+                    when {
+                        isDragged ->
+                            Modifier.graphicsLayer {
+                                val translation = reorderState.dragTranslation()
+                                translationX = translation.x
+                                translationY = translation.y
+                                scaleX = DRAGGED_SHORTCUT_SCALE
+                                scaleY = DRAGGED_SHORTCUT_SCALE
+                            }
+
+                        isSettling ->
+                            Modifier.graphicsLayer {
+                                translationX = reorderState.settleOffset.value.x
+                                translationY = reorderState.settleOffset.value.y
+                            }
+
+                        else -> Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                    }
+                )
+    ) {
+        content(isDragged)
     }
 }
 

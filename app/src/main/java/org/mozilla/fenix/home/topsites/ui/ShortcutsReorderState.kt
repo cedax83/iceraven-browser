@@ -22,7 +22,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -184,42 +186,50 @@ internal fun Modifier.shortcutsReorderGesture(state: ShortcutsReorderState): Mod
     pointerInput(state) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            val touchSlop = viewConfiguration.touchSlop
-
-            // Times out when the finger stays put, which is the long press.
-            var isLongPressAbandoned = false
-            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                while (!isLongPressAbandoned) {
-                    val change =
-                        awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
-                    isLongPressAbandoned =
-                        change == null || !change.pressed || (change.position - down.position).getDistance() > touchSlop
-                }
-            }
-            if (isLongPressAbandoned) return@awaitEachGesture
-
-            var isDragging = false
-            try {
-                while (true) {
-                    val change =
-                        awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) break
-
-                    if (isDragging) {
-                        state.drag(change.position - change.previousPosition)
-                        change.consume()
-                    } else if ((change.position - down.position).getDistance() > touchSlop) {
-                        isDragging = state.startDrag(down.position)
-                        if (!isDragging) break
-                        state.drag(change.position - down.position)
-                        change.consume()
-                    }
-                }
-            } finally {
-                if (isDragging) state.endDrag()
-            }
+            if (awaitLongPress(down)) trackDrag(down, state)
         }
     }
+
+/** Waits for the finger to stay put for a long press. Returns false if it moves or lifts first. */
+private suspend fun AwaitPointerEventScope.awaitLongPress(down: PointerInputChange): Boolean {
+    val touchSlop = viewConfiguration.touchSlop
+    var isAbandoned = false
+
+    withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        while (!isAbandoned) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+            isAbandoned =
+                change == null || !change.pressed || (change.position - down.position).getDistance() > touchSlop
+        }
+    }
+
+    return !isAbandoned
+}
+
+/** Follows the finger until it lifts, starting to drag the shortcut under [down] once it moves past the touch slop. */
+private suspend fun AwaitPointerEventScope.trackDrag(down: PointerInputChange, state: ShortcutsReorderState) {
+    val touchSlop = viewConfiguration.touchSlop
+    var isDragging = false
+
+    try {
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) break
+
+            if (!isDragging && (change.position - down.position).getDistance() > touchSlop) {
+                isDragging = state.startDrag(down.position)
+                if (!isDragging) break
+                state.drag(change.position - down.position)
+            } else if (isDragging) {
+                state.drag(change.position - change.previousPosition)
+            }
+
+            if (isDragging) change.consume()
+        }
+    } finally {
+        if (isDragging) state.endDrag()
+    }
+}
 
 /**
  * Builds the accessibility actions that let [topSite] be moved without dragging it, for the directions where the move

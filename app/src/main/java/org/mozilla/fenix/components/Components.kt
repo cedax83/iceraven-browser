@@ -313,7 +313,8 @@ class Components(
                     AppState(
                             collections = core.tabCollectionStorage.cachedTabCollections,
                             expandedCollections = emptySet(),
-                            topSites = core.topSitesStorage.cachedTopSites.sort().applyUserOrder(settings.topSitesUserOrder),
+                            topSites =
+                                core.topSitesStorage.cachedTopSites.sort().applyUserOrder(settings.topSitesUserOrder),
                             bookmarks = emptyList(),
                             // Provide an initial state for recent tabs to prevent re-rendering on the home screen.
                             //  This will otherwise cause a visual jump as the section gets rendered from no state
