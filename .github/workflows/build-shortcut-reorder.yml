@@ -131,6 +131,7 @@ jobs:
           gh release create "$tag" "$apk" --target "$GITHUB_SHA" --prerelease \
             --title "Iceraven riordino scorciatoie (${GITHUB_RUN_NUMBER})" \
             --notes "Build personale dal ramo shortcut-reorder, versione ${VERSION_NAME}. Si installa accanto a Iceraven ufficiale."
+          gh release delete ci-results --yes --cleanup-tag || true
           gh release list --limit 50 --json tagName --jq '.[].tagName' | { grep '^custom-' || true; } | { grep -vx "$tag" || true; } | while read -r old; do
             gh release delete "$old" --yes --cleanup-tag
           done

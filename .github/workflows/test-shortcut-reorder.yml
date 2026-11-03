@@ -9,7 +9,7 @@ on:
       - shortcut-reorder
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: test-${{ github.ref }}
@@ -98,16 +98,12 @@ jobs:
       # The deletion above also keeps the broken test files out of the formatter.
       - name: Formatting
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           ./gradlew app:ktfmtFormat --no-daemon > ktfmt.log 2>&1 || bash .github/report-gradle-failure.sh ktfmt.log
           git diff -- app/src/main/java/org/mozilla/fenix/home/topsites app/src/test/java/org/mozilla/fenix/home/topsites/TopSitesReorderTest.kt \
             app/src/test/java/org/mozilla/fenix/home/topsites/TopSitesOrderTest.kt > ktfmt.diff
           echo "::notice title=ktfmt::$(wc -l < ktfmt.diff) lines of diff"
-          gh release view ci-results >/dev/null 2>&1 || gh release create ci-results --prerelease --title "CI results" --notes "Temporary" --target "$GITHUB_SHA"
-          gh release upload ci-results ktfmt.diff --clobber
           git checkout -- app/src/main
 
       - name: Detekt
