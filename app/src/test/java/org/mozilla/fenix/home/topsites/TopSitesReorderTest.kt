@@ -37,6 +37,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
 class TopSitesReorderTest {
     @get:Rule val composeTestRule = createComposeRule()
 
+    private var fingerPosition = Offset.Zero
     private val moves = mutableListOf<Pair<TopSite, Int>>()
     private val clicks = mutableListOf<TopSite>()
     private val longClicks = mutableListOf<TopSite>()
@@ -237,6 +238,7 @@ class TopSitesReorderTest {
 
     private fun pressAt(position: Offset) {
         val inContainer = inContainer(position)
+        fingerPosition = inContainer
         container.performTouchInput { down(inContainer) }
     }
 
@@ -248,13 +250,12 @@ class TopSitesReorderTest {
 
     /** Moves the pressed finger to [to] in small steps, letting the grid lay itself out after each one. */
     private fun moveFinger(to: Offset) {
+        val start = fingerPosition
         val target = inContainer(to)
-        repeat(MOVE_STEPS) { step ->
-            container.performTouchInput {
-                val start = currentPosition()
-                val remainingSteps = MOVE_STEPS - step
-                moveTo(start + (target - start) / remainingSteps.toFloat())
-            }
+        for (step in 1..MOVE_STEPS) {
+            val next = start + (target - start) * (step.toFloat() / MOVE_STEPS)
+            fingerPosition = next
+            container.performTouchInput { moveTo(next) }
             composeTestRule.mainClock.advanceTimeBy(FRAME_MILLIS)
             composeTestRule.waitForIdle()
         }

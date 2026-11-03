@@ -45,7 +45,9 @@ jobs:
         run: |
           cd app/src/test/java/org/mozilla/fenix
           find . -name '*.kt' -not -path './helpers/*' -not -path './home/topsites/*' \
-            -not -path './home/SessionControlInteractorTest.kt' -delete
+            -not -path './home/SessionControlInteractorTest.kt' \
+            -not -path './components/menu/fake/*' -delete
+          rm -f home/topsites/ShortcutMenuItemProviderTest.kt
           find . -type f | wc -l
 
       - name: Setup Gradle
