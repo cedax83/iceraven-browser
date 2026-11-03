@@ -14,20 +14,30 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.toOffset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mozilla.components.feature.top.sites.TopSite
+import org.mozilla.fenix.R
 import org.mozilla.fenix.home.topsites.gridKeys
 import org.mozilla.fenix.home.topsites.movedTo
 import org.mozilla.fenix.home.topsites.reorderRange
+import org.mozilla.fenix.tabstray.ui.tabpage.ReorderDirection
+import org.mozilla.fenix.tabstray.ui.tabpage.TabReorderGeometry
 
 /**
  * Tracks a shortcut being dragged around the grid.
@@ -210,3 +220,54 @@ internal fun Modifier.shortcutsReorderGesture(state: ShortcutsReorderState): Mod
             }
         }
     }
+
+/**
+ * Builds the accessibility actions that let [topSite] be moved without dragging it, for the directions where the move
+ * would land inside [reorderRange].
+ *
+ * @param topSite The top site the actions are attached to.
+ * @param sites The top sites currently displayed.
+ * @param index The index of [topSite] in [sites].
+ * @param columns Number of columns of the grid.
+ * @param onTopSiteMoved Invoked with [topSite] and its new index when an action is performed.
+ */
+@Composable
+internal fun rememberShortcutReorderActions(
+    topSite: TopSite,
+    sites: List<TopSite>,
+    index: Int,
+    columns: Int,
+    onTopSiteMoved: (TopSite, Int) -> Unit,
+): List<CustomAccessibilityAction> {
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val up = stringResource(R.string.custom_accessibility_action_reorder_shortcut_up)
+    val down = stringResource(R.string.custom_accessibility_action_reorder_shortcut_down)
+    val left = stringResource(R.string.custom_accessibility_action_reorder_shortcut_left)
+    val right = stringResource(R.string.custom_accessibility_action_reorder_shortcut_right)
+    val currentOnTopSiteMoved by rememberUpdatedState(onTopSiteMoved)
+
+    return remember(topSite, sites, index, columns, isRtl, up, down, left, right) {
+        val geometry = TabReorderGeometry(tabCount = sites.size, columns = columns)
+        val range = sites.reorderRange(index)
+
+        geometry.reorderDirections(tabIndex = index, isRtl = isRtl).mapNotNull { direction ->
+            val toIndex = index + geometry.reorderOffset(direction = direction, isRtl = isRtl)
+            val label =
+                when (direction) {
+                    ReorderDirection.UP -> up
+                    ReorderDirection.DOWN -> down
+                    ReorderDirection.LEFT -> left
+                    ReorderDirection.RIGHT -> right
+                }
+
+            if (toIndex in range) {
+                CustomAccessibilityAction(label = label) {
+                    currentOnTopSiteMoved(topSite, toIndex)
+                    true
+                }
+            } else {
+                null
+            }
+        }
+    }
+}

@@ -292,6 +292,14 @@ private fun ShortcutsLazyGrid(
                     onTopSitesItemBound = onTopSitesItemBound,
                     itemLayout = layout.itemLayout,
                     isDragged = isDragged,
+                    reorderActions =
+                        rememberShortcutReorderActions(
+                            topSite = topSite,
+                            sites = sites,
+                            index = index,
+                            columns = layout.columns,
+                            onTopSiteMoved = onTopSiteMoved,
+                        ),
                 )
             }
         }

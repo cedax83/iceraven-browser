@@ -24,6 +24,8 @@ concurrency:
 jobs:
   build:
     name: Build App
+    # Una build dura mezz'ora: parte solo se il commit la chiede, o a mano.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[apk]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -129,6 +131,6 @@ jobs:
           gh release create "$tag" "$apk" --target "$GITHUB_SHA" --prerelease \
             --title "Iceraven riordino scorciatoie (${GITHUB_RUN_NUMBER})" \
             --notes "Build personale dal ramo shortcut-reorder, versione ${VERSION_NAME}. Si installa accanto a Iceraven ufficiale."
-          gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^custom-' | grep -vx "$tag" | while read -r old; do
+          gh release list --limit 50 --json tagName --jq '.[].tagName' | { grep '^custom-' || true; } | { grep -vx "$tag" || true; } | while read -r old; do
             gh release delete "$old" --yes --cleanup-tag
           done

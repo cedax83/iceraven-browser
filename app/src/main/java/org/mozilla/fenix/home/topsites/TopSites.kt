@@ -42,7 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -319,6 +321,7 @@ data class TopSiteColors(
  * @param onTopSitesItemBound Invoked during the composition of a top site item.
  * @param itemLayout The sizes to lay the top site out with, adapted to the available width.
  * @param isDragged Whether the top site is being dragged, which closes its menu.
+ * @param reorderActions The accessibility actions that move the top site without dragging it.
  */
 @Suppress(
     "LongMethod",
@@ -337,6 +340,7 @@ fun TopSiteItem(
     onTopSitesItemBound: () -> Unit,
     itemLayout: TopSiteItemLayout = TopSiteItemLayout.sizes(),
     isDragged: Boolean = false,
+    reorderActions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -359,7 +363,10 @@ fun TopSiteItem(
     ) {
         Column(
             modifier =
-                Modifier.combinedClickable(
+                Modifier.semantics {
+                        if (reorderActions.isNotEmpty()) customActions = reorderActions
+                    }
+                    .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = { onTopSiteClick(topSite) },

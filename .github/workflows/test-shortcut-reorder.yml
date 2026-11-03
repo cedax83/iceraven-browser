@@ -1,0 +1,101 @@
+# Runs the tests of the shortcuts area and the linters on the shortcut-reorder branch, and reports the problems as
+# annotations, which can be read through the API when the logs can't be downloaded.
+name: Test shortcut reorder
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - shortcut-reorder
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: 'true'
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Install Android SDK with pieces Gradle skips
+        run: ./automation/iceraven/install-sdk.sh
+
+      - name: Patch on the fly
+        run: |
+          ./automation/iceraven/patch_android_components.sh
+          ./automation/iceraven/setup_venv.sh
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Unit tests
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-XX:MaxMetaspaceSize=4g -Xms1g -Xmx7g"
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew app:testForkDebugUnitTest --no-daemon --continue \
+            --tests 'org.mozilla.fenix.home.topsites.*' \
+            --tests 'org.mozilla.fenix.home.SessionControlInteractorTest' \
+            --tests 'org.mozilla.fenix.home.recentvisits.interactor.*' \
+            --tests 'org.mozilla.fenix.ext.TopSiteKtTest' \
+            2>&1 | tee gradle.log || {
+            bash .github/report-gradle-failure.sh gradle.log
+            exit 1
+          }
+
+      - name: Report the test results
+        if: always()
+        shell: python
+        run: |
+          import glob, xml.etree.ElementTree as ET
+          total = failed = 0
+          lines = []
+          for path in glob.glob("gradle/build/**/test-results/**/*.xml", recursive=True):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  total += 1
+                  problem = case.find("failure")
+                  if problem is None:
+                      problem = case.find("error")
+                  if problem is not None:
+                      failed += 1
+                      message = (problem.get("message") or problem.text or "")[:300]
+                      lines.append(f"{case.get('classname').split('.')[-1]}: {case.get('name')}: {message}")
+          text = "\n".join(lines)[:6000].replace("%", "%25").replace("\n", "%0A").replace("::", ": :")
+          print(f"::notice title=Test results::{total} tests, {failed} failed")
+          if lines:
+              print(f"::error title=Failed tests::{text}")
+
+      - name: Formatting
+        if: always()
+        shell: bash
+        run: |
+          ./gradlew app:ktfmtFormat --no-daemon > ktfmt.log 2>&1 || bash .github/report-gradle-failure.sh ktfmt.log
+          git diff --unified=1 -- app/src/main/java/org/mozilla/fenix/home app/src/test/java/org/mozilla/fenix/home/topsites \
+            app/src/main/java/org/mozilla/fenix/utils/Settings.kt app/src/main/java/org/mozilla/fenix/components/Components.kt > ktfmt.diff
+          echo "::notice title=ktfmt::$(wc -l < ktfmt.diff) lines of diff"
+          msg=$(sed -e 's/%/%25/g' -e 's/::/: :/g' ktfmt.diff | awk 'BEGIN{ORS="%0A"} {print}')
+          [ -s ktfmt.diff ] && echo "::warning title=ktfmt diff::${msg:0:7000}"
+          git checkout -- app
+
+      - name: Detekt
+        if: always()
+        shell: bash
+        run: |
+          ./gradlew app:detekt --no-daemon > detekt.log 2>&1 || bash .github/report-gradle-failure.sh detekt.log
+          grep -E "TopSite|Shortcuts|topsites/|utils/Settings.kt|Components.kt" detekt.log | sed -e 's/%/%25/g' -e 's/::/: :/g' | head -25 > detekt.txt || true
+          echo "::notice title=detekt::$(grep -cE 'detekt|\.kt:[0-9]+' detekt.log) lines, $(wc -l < detekt.txt) about these files"
+          msg=$(awk 'BEGIN{ORS="%0A"} {print}' detekt.txt)
+          [ -s detekt.txt ] && echo "::warning title=detekt::${msg:0:6000}"
+          exit 0

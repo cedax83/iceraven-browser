@@ -1650,6 +1650,14 @@
   <string name="custom_accessibility_action_reorder_tab_right">Move tab right</string>
   <!-- Custom accessibility action to reorder a tab down rather than dragging. -->
   <string name="custom_accessibility_action_reorder_tab_down">Move tab down</string>
+  <!-- Custom accessibility action to move a homepage shortcut up rather than dragging. -->
+  <string name="custom_accessibility_action_reorder_shortcut_up">Move shortcut up</string>
+  <!-- Custom accessibility action to move a homepage shortcut left rather than dragging. -->
+  <string name="custom_accessibility_action_reorder_shortcut_left">Move shortcut left</string>
+  <!-- Custom accessibility action to move a homepage shortcut right rather than dragging. -->
+  <string name="custom_accessibility_action_reorder_shortcut_right">Move shortcut right</string>
+  <!-- Custom accessibility action to move a homepage shortcut down rather than dragging. -->
+  <string name="custom_accessibility_action_reorder_shortcut_down">Move shortcut down</string>
 
 
   <!-- Color labels for tab groups, used for accessibility and selection UI. -->
