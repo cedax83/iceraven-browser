@@ -178,8 +178,8 @@ internal class ShortcutsReorderState(
  * Lets the user drag a shortcut after long pressing it.
  *
  * The events are read on the initial pass, before the shortcuts see them. Shortcuts handle their own long press to open
- * their menu and then consume every event until the finger is lifted, which would otherwise cancel a drag detected by
- * a parent such as with `detectDragGesturesAfterLongPress`. Nothing is consumed here until the drag starts, so tapping,
+ * their menu and then consume every event until the finger is lifted, which would otherwise cancel a drag detected by a
+ * parent such as with `detectDragGesturesAfterLongPress`. Nothing is consumed here until the drag starts, so tapping,
  * opening the menu and scrolling the page keep working unchanged.
  */
 internal fun Modifier.shortcutsReorderGesture(state: ShortcutsReorderState): Modifier =
@@ -197,7 +197,7 @@ private suspend fun AwaitPointerEventScope.awaitLongPress(down: PointerInputChan
 
     withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
         while (!isAbandoned) {
-            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+            val change = awaitChangeOf(down)
             isAbandoned =
                 change == null || !change.pressed || (change.position - down.position).getDistance() > touchSlop
         }
@@ -212,24 +212,25 @@ private suspend fun AwaitPointerEventScope.trackDrag(down: PointerInputChange, s
     var isDragging = false
 
     try {
-        while (true) {
-            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-            if (!change.pressed) break
-
+        var change = awaitChangeOf(down)
+        while (change != null && change.pressed) {
+            val wasDragging = isDragging
             if (!isDragging && (change.position - down.position).getDistance() > touchSlop) {
                 isDragging = state.startDrag(down.position)
-                if (!isDragging) break
-                state.drag(change.position - down.position)
-            } else if (isDragging) {
-                state.drag(change.position - change.previousPosition)
             }
-
-            if (isDragging) change.consume()
+            if (isDragging) {
+                state.drag(change.position - if (wasDragging) change.previousPosition else down.position)
+                change.consume()
+            }
+            change = awaitChangeOf(down)
         }
     } finally {
         if (isDragging) state.endDrag()
     }
 }
+
+private suspend fun AwaitPointerEventScope.awaitChangeOf(down: PointerInputChange): PointerInputChange? =
+    awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
 
 /**
  * Builds the accessibility actions that let [topSite] be moved without dragging it, for the directions where the move

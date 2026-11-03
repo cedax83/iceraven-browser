@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew app:testDebugUnitTest --no-daemon --continue \
+          ./gradlew app:testForkReleaseUnitTest -PtestBuildType=forkRelease --no-daemon --continue \
             --tests 'org.mozilla.fenix.home.topsites.*' \
             --tests 'org.mozilla.fenix.home.SessionControlInteractorTest' \
             2>&1 | tee gradle.log || {

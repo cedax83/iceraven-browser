@@ -25,11 +25,10 @@ internal fun List<TopSite>.applyUserOrder(order: List<String>): List<TopSite> {
     if (order.isEmpty()) return this
 
     val unorderedPinned = filter { it.isPinnedShortcut() }.toMutableList()
-    val orderedPinned =
-        order.mapNotNull { url ->
-            val index = unorderedPinned.indexOfFirst { it.url == url }
-            if (index >= 0) unorderedPinned.removeAt(index) else null
-        }
+    val orderedPinned = order.mapNotNull { url ->
+        val index = unorderedPinned.indexOfFirst { it.url == url }
+        if (index >= 0) unorderedPinned.removeAt(index) else null
+    }
 
     return filter { it is TopSite.Provided } +
         orderedPinned +
@@ -40,8 +39,8 @@ internal fun List<TopSite>.applyUserOrder(order: List<String>): List<TopSite> {
 /**
  * The indices the top site at [draggedIndex] can be dropped on.
  *
- * Shortcuts can only be moved within the pinned block, because anything after it has no stable position. A site that
- * is not pinned yet gets pinned when it is moved, so it can also take the slot right after the block.
+ * Shortcuts can only be moved within the pinned block, because anything after it has no stable position. A site that is
+ * not pinned yet gets pinned when it is moved, so it can also take the slot right after the block.
  */
 internal fun List<TopSite>.reorderRange(draggedIndex: Int): IntRange {
     val dragged = getOrNull(draggedIndex)
@@ -60,8 +59,10 @@ internal fun <T> List<T>.movedTo(fromIndex: Int, toIndex: Int): List<T> =
  * The URLs to save as the user's order after [moved] was moved: every pinned shortcut, plus [moved] itself as it is
  * about to be pinned if it was not already.
  */
-internal fun List<TopSite>.userOrderAfterMoving(moved: TopSite): List<String> =
-    filter { it.isPinnedShortcut() || it == moved }.map { it.url }
+internal fun List<TopSite>.userOrderAfterMoving(moved: TopSite): List<String> = filter {
+    it.isPinnedShortcut() || it == moved
+}
+    .map { it.url }
 
 /** Returns a copy of this order that follows a shortcut whose URL was edited from [oldUrl] to [newUrl]. */
 internal fun List<String>.withUrlChanged(oldUrl: String, newUrl: String): List<String> {

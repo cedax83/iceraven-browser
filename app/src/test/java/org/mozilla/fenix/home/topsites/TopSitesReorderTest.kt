@@ -233,8 +233,7 @@ class TopSitesReorderTest {
     private fun center(title: String): Offset =
         composeTestRule.onNodeWithText(title).fetchSemanticsNode().boundsInRoot.center
 
-    private fun inContainer(position: Offset): Offset =
-        position - container.fetchSemanticsNode().boundsInRoot.topLeft
+    private fun inContainer(position: Offset): Offset = position - container.fetchSemanticsNode().boundsInRoot.topLeft
 
     private fun pressAt(position: Offset) {
         val inContainer = inContainer(position)
