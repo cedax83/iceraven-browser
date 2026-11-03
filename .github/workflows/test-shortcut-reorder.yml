@@ -49,6 +49,13 @@ jobs:
             -not -path './components/menu/fake/*' -delete
           find . -type f | wc -l
 
+      # The manifest that declares this activity for Compose tests is only added to the debug variants, which no longer
+      # build. Without it every Compose test fails before starting.
+      - name: Declare the activity Compose tests run in
+        run: |
+          sed -i 's#</application>#<activity android:name="androidx.activity.ComponentActivity" android:exported="false" /></application>#' app/src/main/AndroidManifest.xml
+          grep -c 'androidx.activity.ComponentActivity' app/src/main/AndroidManifest.xml
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
@@ -81,7 +88,7 @@ jobs:
                       problem = case.find("error")
                   if problem is not None:
                       failed += 1
-                      message = (problem.get("message") or problem.text or "")[:300]
+                      message = (problem.get("message") or problem.text or "")[:220]
                       lines.append(f"{case.get('classname').split('.')[-1]}: {case.get('name')}: {message}")
           text = "\n".join(lines)[:6000].replace("%", "%25").replace("\n", "%0A").replace("::", ": :")
           print(f"::notice title=Test results::{total} tests, {failed} failed")
